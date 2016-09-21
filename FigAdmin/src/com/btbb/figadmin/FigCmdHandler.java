@@ -468,7 +468,7 @@ public class FigCmdHandler {
 		if (plugin.autoComplete)
 			p = plugin.expandName(p); // If the admin has chosen to do so,
 										// autocomplete
-		OfflinePlayer v = getPlayer(args[1]);
+		OfflinePlayer v = getPlayer(p);
 
 		// the victim?
 		if (v == null || !(v instanceof Player)) {
