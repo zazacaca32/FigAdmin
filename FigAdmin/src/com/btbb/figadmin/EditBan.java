@@ -34,12 +34,15 @@ public class EditBan {
 	String ipAddress;
 	long time;
 	long endTime;
-	int type;
-	final static int BAN = 0;
-	static final int IPBAN = 1;
-	final static int WARN = 2;
+	BanType type;
 
-	EditBan(int id, UUID uuid, String name, String reason, String admin, long time, long endTime, int type, String IP) {
+	// BAN = 0; IPBAN = 1 ;WARN = 2;
+	public static enum BanType {
+		BAN, IPBAN, WARN;
+
+	}
+
+	EditBan(int id, UUID uuid, String name, String reason, String admin, long time, long endTime, BanType type, String IP) {
 		this.id = id;
 		this.uuid = uuid;
 		this.name = name;
@@ -51,19 +54,19 @@ public class EditBan {
 		this.ipAddress = IP;
 	}
 
-	EditBan(UUID uuid, String name, String reason, String admin, int type) {
+	EditBan(UUID uuid, String name, String reason, String admin, long endTime, BanType type, String IP) {
 		this.id = 0;
 		this.uuid = uuid;
 		this.name = name;
 		this.reason = reason;
 		this.admin = admin;
 		this.time = System.currentTimeMillis();
-		this.endTime = 0;
+		this.endTime = endTime;
 		this.type = type;
-		this.ipAddress = null;
+		this.ipAddress = IP;
 	}
-
-	EditBan(UUID uuid, String name, String reason, String admin, String IP, int type) {
+	
+	EditBan(UUID uuid, String name, String reason, String admin, BanType type, String IP) {
 		this.id = 0;
 		this.uuid = uuid;
 		this.name = name;
@@ -74,19 +77,7 @@ public class EditBan {
 		this.type = type;
 		this.ipAddress = IP;
 	}
-
-	EditBan(UUID uuid, String name, String reason, String admin, long endTime, int type) {
-		this.id = 0;
-		this.uuid = uuid;
-		this.name = name;
-		this.reason = reason;
-		this.admin = admin;
-		this.time = System.currentTimeMillis();
-		this.endTime = endTime;
-		this.type = type;
-		this.ipAddress = null;
-	}
-
+	
 	private EditBan() {
 	}
 
@@ -113,7 +104,7 @@ public class EditBan {
 		e.ipAddress = (d[IP].equals("null")) ? null : d[IP];
 		e.time = Long.parseLong(d[TIME]);
 		e.endTime = Long.parseLong(d[ENDTIME]);
-		e.type = Integer.parseInt(d[TYPE]);
+		e.type = BanType.values()[Integer.parseInt(d[TYPE])];
 		return e;
 	}
 
@@ -135,7 +126,7 @@ public class EditBan {
 		s.append("|");
 		s.append(endTime);
 		s.append("|");
-		s.append(type);
+		s.append(type.ordinal());
 		return s.toString();
 	}
 
@@ -144,8 +135,8 @@ public class EditBan {
 			return ((String) object).toLowerCase().equals(this.uuid);
 		} else if (object instanceof EditBan) {
 			EditBan o = (EditBan) object;
-			return o.uuid.equals(this.uuid) && o.admin.equals(this.admin) && o.reason.equals(this.reason) && o.ipAddress.equals(this.ipAddress)
-					&& o.time == this.time && o.endTime == this.endTime && o.type == this.type;
+			return o.uuid.equals(this.uuid) && o.admin.equals(this.admin) && o.reason.equals(this.reason)
+					&& o.ipAddress.equals(this.ipAddress) && o.time == this.time && o.endTime == this.endTime && o.type == this.type;
 		}
 		return false;
 

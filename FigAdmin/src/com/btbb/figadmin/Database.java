@@ -52,6 +52,7 @@ public abstract class Database {
     
     protected abstract boolean deleteFullRecord(int id);
     
+    public abstract int unbanIP(String ip);
     public abstract ArrayList<EditBan> listRecords(UUID uuid);
     
     public abstract ArrayList<EditBan> listRecords(String name, boolean exact);

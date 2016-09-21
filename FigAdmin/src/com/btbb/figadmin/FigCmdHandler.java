@@ -21,8 +21,6 @@ SOFTWARE.
 */
 package com.btbb.figadmin;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -33,6 +31,8 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+
+import com.btbb.figadmin.EditBan.BanType;
 
 public class FigCmdHandler {
 	FigAdmin plugin;
@@ -107,35 +107,33 @@ public class FigCmdHandler {
 			sender.sendMessage(formatMessage(getConfig().getString("messages.badPlayerName", "bad player name")));
 			return false;
 		}
-		boolean found = false;
-		for (int i = 0; i < plugin.bannedPlayers.size(); i++) {
-			EditBan e = plugin.bannedPlayers.get(i);
-			if (e.name.equalsIgnoreCase(p)) {
-				// If the current ban is selected in editor, get rid of it
-				if (plugin.editor.ban != null && plugin.editor.ban.equals(e)) {
-					plugin.editor.ban = null;
-				}
-				found = true;
-				plugin.bannedPlayers.remove(i);
-				// Don't break, cycle through all banned players in case player
-				// is banned twice
-				plugin.db.removeFromBanlist(e.name);
-			}
-		}
 
 		// unban the player from minecraft vanilla if possible
 		OfflinePlayer op = FigAdmin.getPlayer(p);
 		if (op != null && op.isBanned()) {
 			plugin.getServer().getBanList(org.bukkit.BanList.Type.NAME).pardon(op.getName());
-			found = true;
 		}
-		if (found) {
+		UUID id;
+		if (op == null) {
+			id = FigAdmin.getUUIDfromMojang(p);
+		} else {
+			id = op.getUniqueId();
+			p = op.getName();
+		}
+		EditBan eb = plugin.isBanned(id);
+		if (eb != null && eb.type == BanType.IPBAN) {
+			// remove ip bans from minecraft
+			if (eb.ipAddress != null)
+				plugin.getServer().unbanIP(eb.ipAddress);
+		}
+		if (id != null && plugin.db.removeFromBanlist(id)) {
 			// Log in console
 			FigAdmin.log.log(Level.INFO, "[FigAdmin] " + kicker + " unbanned player " + p + ".");
 
 			String globalMsg = getConfig().getString("messages.unbanMsgGlobal", "player unban global %victim%");
 			globalMsg = globalMsg.replaceAll("%victim%", p).replaceAll("%player%", kicker);
 
+			plugin.updateCache();
 			// send a message to everyone!
 			plugin.getServer().broadcastMessage(formatMessage(globalMsg));
 		} else {
@@ -209,7 +207,7 @@ public class FigCmdHandler {
 		Player victim = ((op != null) && (op).isOnline()) ? (Player) op : null;
 		if (victim == null) {
 			String kickerMsg = getConfig().getString("messages.kickMsgFailed");
-			kickerMsg = kickerMsg.replaceAll("%victim%", p);
+			kickerMsg = kickerMsg.replaceAll("%victim%", op.getName());
 			sender.sendMessage(formatMessage(kickerMsg));
 			return true;
 		}
@@ -262,8 +260,10 @@ public class FigCmdHandler {
 			UUID id;
 			if (victim == null)
 				id = FigAdmin.getUUIDfromMojang(p);
-			else
+			else {
 				id = victim.getUniqueId();
+				p = victim.getName();
+			}
 			if (id == null) {
 				String msg = getConfig().getString("messages.noSuchPlayer").replaceAll("%player%", p);
 				sender.sendMessage(formatMessage(msg));
@@ -290,13 +290,10 @@ public class FigCmdHandler {
 			}
 
 			if (ipBan && ip != null) {
-				ban = new EditBan(id, p, reason, kicker, ip, EditBan.IPBAN);
+				ban = new EditBan(id, p, reason, kicker, EditBan.BanType.IPBAN, ip);
 			} else {
-				ban = new EditBan(id, p, reason, kicker, ip, EditBan.BAN);
+				ban = new EditBan(id, p, reason, kicker, EditBan.BanType.BAN, ip);
 			}
-
-			plugin.bannedPlayers.add(ban); // Add name to RAM
-
 			// Add player to database
 			plugin.db.addPlayer(ban);
 
@@ -318,6 +315,7 @@ public class FigCmdHandler {
 
 			}
 
+			plugin.updateCache();
 			// Send message to all players
 			if (broadcast) {
 				String kickerMsgAll = getConfig().getString("messages.banMsgBroadcast");
@@ -344,7 +342,7 @@ public class FigCmdHandler {
 			kicker = player.getName();
 		}
 
-		if (args.length < 3) 
+		if (args.length < 3)
 			return false;
 
 		String p = args[0]; // Get the victim's name
@@ -367,7 +365,7 @@ public class FigCmdHandler {
 		else
 			reason = getConfig().getString("banDefaultReason", "Ban hammer has spoken!");
 
-		if (plugin.isBanned(p) != null) {
+		if (plugin.isBanned(victim.getUniqueId()) != null) {
 			// already banned
 			String kickerMsg = getConfig().getString("messages.banMsgFailed", "Ban failed");
 			kickerMsg = kickerMsg.replaceAll("%victim%", p);
@@ -376,14 +374,13 @@ public class FigCmdHandler {
 		}
 		long tempTime = plugin.parseTimeSpec(args[1], args[2]); // parse the
 																// time and
-		// do other crap below
 		if (tempTime == 0)
 			return false;
 		tempTime = System.currentTimeMillis() + tempTime;
-		EditBan ban = new EditBan(victim.getUniqueId(), p, reason, kicker, tempTime, EditBan.BAN);
-		plugin.bannedPlayers.add(ban);
+		String ip = (victim instanceof Player) ? ((Player) victim).getAddress().getAddress().getHostAddress() : null;
+		EditBan ban = new EditBan(victim.getUniqueId(), victim.getName(), reason, kicker, tempTime, EditBan.BanType.BAN, ip);
 		plugin.db.addPlayer(ban);
-		FigAdmin.log.log(Level.INFO, "[FigAdmin] " + kicker + " tempbanned player " + p + ".");
+		FigAdmin.log.log(Level.INFO, "[FigAdmin] " + kicker + " tempbanned player " + victim.getName() + ".");
 
 		if (victim != null && victim.isOnline()) { // If he is online, kick him
 													// with a nice message
@@ -392,12 +389,13 @@ public class FigCmdHandler {
 			kickerMsg = kickerMsg.replaceAll("%reason%", reason);
 			((Player) victim).kickPlayer(formatMessage(kickerMsg));
 		}
+		plugin.updateCache();
 		if (broadcast) {
 			// Send message to all players
 			String kickerMsgAll = getConfig().getString("messages.tempbanMsgBroadcast");
 			kickerMsgAll = kickerMsgAll.replaceAll("%player%", kicker);
 			kickerMsgAll = kickerMsgAll.replaceAll("%reason%", reason);
-			kickerMsgAll = kickerMsgAll.replaceAll("%victim%", p);
+			kickerMsgAll = kickerMsgAll.replaceAll("%victim%", victim.getName());
 			plugin.getServer().broadcastMessage(formatMessage(kickerMsgAll));
 		}
 		return true;
@@ -491,7 +489,8 @@ public class FigCmdHandler {
 		}
 
 		// Add player to database
-		EditBan b = new EditBan(victim.getUniqueId(), v.getName(), reason, kicker, EditBan.WARN);
+		EditBan b = new EditBan(victim.getUniqueId(), v.getName(), reason, kicker, EditBan.BanType.WARN,
+				victim.getAddress().getAddress().getHostAddress());
 		plugin.db.addPlayer(b);
 
 		// Log in console
@@ -523,6 +522,7 @@ public class FigCmdHandler {
 				String format = s.substring(i + 1);
 				String[] tempargs = new String[] { p, time, format, reason };
 				tempbanPlayer(sender, tempargs);
+				plugin.updateCache();
 			}
 		}
 
@@ -554,18 +554,12 @@ public class FigCmdHandler {
 			sender.sendMessage(formatMessage(getConfig().getString("messages.noPermission")));
 			return true;
 		}
-
 		try {
-			BufferedWriter banlist = new BufferedWriter(new FileWriter("banned-players.json", true));
-			for (int n = 0; n < plugin.bannedPlayers.size(); n++) {
-				banlist.write(plugin.bannedPlayers.get(n).name);
-				banlist.newLine();
-			}
-			banlist.close();
+			VanillaBans.exportBans(plugin.db.getBannedPlayers());
 		} catch (IOException e) {
 			FigAdmin.log.log(Level.SEVERE, "FigAdmin: Couldn't write to banned-players.json");
 		}
-		sender.sendMessage(formatMessage(getConfig().getString("messages.exportMsg", "expored")));
+		sender.sendMessage(formatMessage(getConfig().getString("messages.exportMsg", "exported")));
 		return true;
 
 	}
@@ -578,21 +572,21 @@ public class FigCmdHandler {
 		if (args.length < 1) {
 			return false;
 		}
-		boolean success = false;
 		String IP = args[0];
-		for (int i = 0; i < plugin.bannedPlayers.size(); i++) {
-			EditBan b = plugin.bannedPlayers.get(i);
-			if (b.ipAddress != null && b.ipAddress.equals(IP)) {
-				plugin.db.deleteFullRecord(b.id);
-				plugin.bannedPlayers.remove(i);
-				sender.sendMessage(formatMessage(getConfig().getString("messages.unbanMsg").replaceAll("%victim%", b.name)));
-				success = true;
-			}
+		int num = plugin.db.unbanIP(IP);
+		for (String s : plugin.getServer().getIPBans()) {
+			if (s.equals(IP))
+				num++;
 		}
-		if (!success) {
+		plugin.getServer().unbanIP(IP);
+		if (num < 1) {
 			String failed = getConfig().getString("messages.unbanMsgFailed", "unban failed").replaceAll("%victim%", "IP " + IP);
 			sender.sendMessage(formatMessage(failed));
+		} else {
+			sender.sendMessage(formatMessage("&aUnbanned " + num + " players"));
 		}
+
+		plugin.updateCache();
 		return true;
 	}
 

@@ -75,7 +75,8 @@ public class FlatFileDatabase extends Database {
 				if (!line.startsWith("#")) {
 					String[] data = line.split("\\|");
 					if (data.length > 1) {
-						match = compare(playerID, data[EditBan.UID]) && Integer.parseInt(data[EditBan.TYPE]) != EditBan.WARN;
+						match = compare(playerID, data[EditBan.UID])
+								&& EditBan.BanType.values()[Integer.parseInt(data[EditBan.TYPE])] != EditBan.BanType.WARN;
 					}
 				}
 				if (!match) {
@@ -110,7 +111,8 @@ public class FlatFileDatabase extends Database {
 				if (!line.startsWith("#")) {
 					String[] data = line.split("\\|");
 					if (data.length > 1) {
-						match = data[EditBan.NAME].equalsIgnoreCase(player) && Integer.parseInt(data[EditBan.TYPE]) != EditBan.WARN;
+						match = data[EditBan.NAME].equalsIgnoreCase(player)
+								&& EditBan.BanType.values()[Integer.parseInt(data[EditBan.TYPE])] != EditBan.BanType.WARN;
 					}
 				}
 				if (!match) {
@@ -165,7 +167,7 @@ public class FlatFileDatabase extends Database {
 				if (!data.startsWith("#")) {
 					if (data.length() > 0) {
 						EditBan e = EditBan.loadBan(data);
-						if (e != null && e.type != 2) {
+						if (e != null && e.type != EditBan.BanType.WARN) {
 							list.add(e);
 							id = Math.max(e.id, id);
 						}
@@ -362,7 +364,7 @@ public class FlatFileDatabase extends Database {
 		ArrayList<EditBan> records = listRecords(player);
 		int warns = 0;
 		for (EditBan e : records) {
-			if (e.type == EditBan.WARN)
+			if (e.type == EditBan.BanType.WARN)
 				warns++;
 		}
 		return warns;
@@ -384,7 +386,7 @@ public class FlatFileDatabase extends Database {
 				boolean skip = false;
 				EditBan b = EditBan.loadBan(line);
 				if (b != null) {
-					if (b.uuid.equals(playerId) && b.type == EditBan.WARN) {
+					if (b.uuid.equals(playerId) && b.type == EditBan.BanType.WARN) {
 						skip = true;
 						warns++;
 					}
@@ -410,6 +412,43 @@ public class FlatFileDatabase extends Database {
 		if (uuid == null || uuidStr == null)
 			return false;
 		return UUID.fromString(uuidStr).equals(uuid);
+	}
+
+	@Override
+	public int unbanIP(String ip) {
+		int res = 0;
+		try {
+			File tempFile = new File(banlist.getAbsolutePath() + ".tmp");
+			BufferedReader br = new BufferedReader(new FileReader(banlist));
+			PrintWriter pw = new PrintWriter(new FileWriter(tempFile));
+			String line = null;
+			// Loops through the temporary file and deletes the player
+			while ((line = br.readLine()) != null) {
+				boolean match = false;
+				if (!line.startsWith("#")) {
+					String[] data = line.split("\\|");
+					if (data.length > 1) {
+						match = (data[EditBan.IP] != null && data[EditBan.IP].equals(ip));
+					}
+				}
+				if (!match) {
+					pw.println(line);
+					pw.flush();
+				} else
+					res++;
+			}
+			pw.close();
+			br.close();
+
+			// Let's delete the old banlist.txt and change the name of our
+			// temporary list!
+			banlist.delete();
+			tempFile.renameTo(banlist);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return res;
+
 	}
 
 }

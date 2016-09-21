@@ -54,13 +54,13 @@ public class EditCommand implements CommandExecutor {
 		this.plugin = plugin;
 	}
 
-	private static String banType(int num) {
+	private static String banType(EditBan.BanType num) {
 		switch (num) {
-		case 0:
+		case BAN:
 			return "Ban   ";
-		case 1:
+		case IPBAN:
 			return "IP-Ban";
-		case 2:
+		case WARN:
 			return "Warn  ";
 		default:
 			return "?";
@@ -89,44 +89,42 @@ public class EditCommand implements CommandExecutor {
 
 			public boolean run2() {
 				try {
-					if (args[0].equalsIgnoreCase("list")) 
+					args[0] = args[0].toLowerCase();
+					if (args[0].equalsIgnoreCase("list"))
 						return list(sender, label, args);
-					
-					if (args[0].equalsIgnoreCase("load")) 
+
+					if (args[0].equalsIgnoreCase("load"))
 						return load(sender, label, args);
-					
-					if (args[0].equalsIgnoreCase("select")) 
+
+					if (args[0].equalsIgnoreCase("select"))
 						return select(sender, label, args);
-					
-					if (args[0].equalsIgnoreCase("delete")) 
+
+					if (args[0].equalsIgnoreCase("delete"))
 						return delete(sender, label, args);
-					
-					if (args[0].equalsIgnoreCase("search")) 
+
+					if (args[0].equalsIgnoreCase("search"))
 						return search(sender, label, args);
-					
 
 					if (ban == null && args[0].equalsIgnoreCase("save") || args[0].equalsIgnoreCase("cancel")
 							|| args[0].equalsIgnoreCase("show") || args[0].equalsIgnoreCase("view") || args[0].equalsIgnoreCase("reason")
-							|| args[0].equalsIgnoreCase("time")) {
+							|| args[0].equalsIgnoreCase("time") || args[0].equalsIgnoreCase("ip")) {
 						if (ban == null) {
 							sender.sendMessage(ChatColor.RED + "You aren't editing a ban. Do /" + label + " select <id>");
 							return true;
 						}
-						return save(sender, args);
 					}
-
+					if (args[0].equalsIgnoreCase("save"))
+						return save(sender, args);
 					if (args[0].equalsIgnoreCase("cancel"))
 						return cancel(sender, args);
-
 					if (args[0].equalsIgnoreCase("show") || args[0].equalsIgnoreCase("view"))
 						return view(sender, args);
-
 					if (args[0].equalsIgnoreCase("reason"))
 						return reason(sender, args);
-
 					if (args[0].equalsIgnoreCase("time"))
 						return time(sender, label, args);
-
+					if (args[0].equalsIgnoreCase("ip"))
+						return ip(sender, label, args);
 				} catch (Exception exc) {
 					FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Error: EditCommand");
 					exc.printStackTrace();
@@ -143,6 +141,8 @@ public class EditCommand implements CommandExecutor {
 		sender.sendMessage(ChatColor.AQUA + banType(eb.type));
 		sender.sendMessage(ChatColor.GOLD + " | " + ChatColor.WHITE + eb.name + ChatColor.YELLOW + " was banned by " + ChatColor.WHITE
 				+ eb.admin + ChatColor.YELLOW);
+		if (eb.ipAddress != null)
+			sender.sendMessage(ChatColor.GOLD + " | IP: " + ChatColor.WHITE + eb.ipAddress);
 		sender.sendMessage(ChatColor.GOLD + " | at " + shortTime.format((new Date(eb.time))));
 		if (eb.endTime > 0)
 			sender.sendMessage(
@@ -258,13 +258,6 @@ public class EditCommand implements CommandExecutor {
 
 	private boolean save(CommandSender sender, String[] args) {
 		if (plugin.db.saveFullRecord(ban)) {
-			for (int i = 0; i < plugin.bannedPlayers.size(); i++) {
-				EditBan eb = plugin.bannedPlayers.get(i);
-				if (eb.name.equals(ban.name) && eb.type == ban.type) {
-					plugin.bannedPlayers.set(i, eb);
-					break;
-				}
-			}
 			sender.sendMessage(ChatColor.GREEN + "Saved ban!");
 		} else {
 			sender.sendMessage(ChatColor.RED + "Saving Failed!");
@@ -285,6 +278,7 @@ public class EditCommand implements CommandExecutor {
 			sender.sendMessage(ChatColor.RED + "Usage: reason <add/set/show> (text)");
 			return true;
 		}
+		boolean show = false;
 		if (args[1].equalsIgnoreCase("add")) {
 			if (args.length < 3) {
 				sender.sendMessage(ChatColor.RED + "Usage: reason add <text>");
@@ -292,9 +286,8 @@ public class EditCommand implements CommandExecutor {
 			}
 			ban.reason += " " + plugin.combineSplit(2, args, " ");
 			ban.reason = formatMessage(ban.reason);
-			return true;
+			show = true;
 		}
-		boolean show = false;
 		if (args[1].equalsIgnoreCase("set")) {
 			if (args.length < 3) {
 				sender.sendMessage(ChatColor.RED + "Usage: reason set <text>");
@@ -316,7 +309,7 @@ public class EditCommand implements CommandExecutor {
 			sender.sendMessage(ChatColor.RED + "Usage: /" + label + " time <add/sub/set> <time> <sec/min/hour/day/week/month>");
 			return true;
 		}
-		if (ban.type == EditBan.WARN) {
+		if (ban.type == EditBan.BanType.WARN) {
 			sender.sendMessage(ChatColor.RED + "No such operation is possible");
 			return true;
 		}
@@ -346,6 +339,35 @@ public class EditCommand implements CommandExecutor {
 		return false;
 	}
 
+	private boolean ip(CommandSender sender, String label, String[] args) {
+		if (args.length < 2 || (args.length == 1 && args[1].equalsIgnoreCase("set"))) {
+			sender.sendMessage(ChatColor.RED + "Usage: /" + label + " ip <set|show> <ip>");
+			return true;
+		}
+		if (ban.type == EditBan.BanType.WARN) {
+			sender.sendMessage(ChatColor.RED + "No such operation is possible");
+			return true;
+		}
+		if (args[1].equalsIgnoreCase("show")) {
+			sender.sendMessage(ChatColor.YELLOW + "IP: " + ChatColor.WHITE + ban.ipAddress);
+			return true;
+		}
+		if (!args[1].equalsIgnoreCase("set"))
+			return false;
+		String ip = args[2];
+		if (!ip.matches
+				("^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.([01]?\\d\\d?|2[0-4]\\d|25[0-5])$")) {
+			sender.sendMessage(ChatColor.RED + "Invalid IP format: " + ip);
+			return true;
+		}
+		ban.ipAddress = ip;
+		if (ban.type != EditBan.BanType.IPBAN)
+			sender.sendMessage(ChatColor.YELLOW + "Warning: This is not an IP ban. Changes to IP will have no effect.");
+		sender.sendMessage(ChatColor.YELLOW + "New ip: " + ip);
+		
+		return true;
+	}
+
 	private boolean delete(CommandSender sender, String label, String[] args) {
 		if (ban != null) {
 			sender.sendMessage(ChatColor.RED + "Finish what you're doing first!");
@@ -362,18 +384,12 @@ public class EditCommand implements CommandExecutor {
 			sender.sendMessage(ChatColor.RED + "ID has to be a number!");
 			return true;
 		}
-		for (int i = 0; i < plugin.bannedPlayers.size(); i++) {
-			if (plugin.bannedPlayers.get(i).id == id) {
-				plugin.bannedPlayers.remove(i);
-				break;
-			}
-		}
 		boolean success = plugin.db.deleteFullRecord(id);
 		if (success)
 			sender.sendMessage(ChatColor.GREEN + "Deleted record " + id);
 		else
 			sender.sendMessage(ChatColor.RED + "Can't find record " + id);
-		return success;
+		return true;
 	}
 
 	private boolean cancel(CommandSender sender, String[] args) {

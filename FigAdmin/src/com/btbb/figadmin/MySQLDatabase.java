@@ -202,7 +202,7 @@ public class MySQLDatabase extends Database {
 		try {
 			conn = getSQLConnection();
 			ps = conn
-					.prepareStatement("INSERT INTO `" + mysqlTable + "` (name,uuid,reason,admin,temptime,type,time) VALUES(?,?,?,?,?,?,?)");
+					.prepareStatement("INSERT INTO `" + mysqlTable + "` (name,uuid,reason,admin,temptime,type,time,ip) VALUES(?,?,?,?,?,?,?,?)");
 			ps.setString(1, e.name);
 			ps.setString(2, e.uuid.toString());
 			ps.setString(3, e.reason);
@@ -211,8 +211,9 @@ public class MySQLDatabase extends Database {
 				ps.setLong(5, 0);
 			} else
 				ps.setLong(5, e.endTime);
-			ps.setInt(6, e.type);
+			ps.setInt(6, e.type.ordinal());
 			ps.setLong(7, System.currentTimeMillis());
+			ps.setString(8, e.ipAddress);
 			ps.executeUpdate();
 			// Update banedit ID
 			PreparedStatement getID = conn.prepareStatement("SELECT LAST_INSERT_ID()");
@@ -388,7 +389,7 @@ public class MySQLDatabase extends Database {
 			rs = ps.executeQuery();
 			while (rs.next()) {
 				return new EditBan(rs.getInt("id"), UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getString("reason"),
-						rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), rs.getInt("type"), rs.getString("ip"));
+						rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), EditBan.BanType.values()[rs.getInt("type")], rs.getString("ip"));
 			}
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
@@ -418,16 +419,17 @@ public class MySQLDatabase extends Database {
 		try {
 			conn = getSQLConnection();
 			ps = conn.prepareStatement("UPDATE " + mysqlTable
-					+ " SET name = ?, reason = ?, admin = ?, time = ?, temptime = ?, type = ?, uuid = ? WHERE id = ? LIMIT 1");
+					+ " SET name = ?, reason = ?, admin = ?, time = ?, temptime = ?, type = ?, uuid = ?, ip = ? WHERE id = ? LIMIT 1");
 			
 			ps.setString(1, ban.name);
 			ps.setString(2, ban.reason);
 			ps.setString(3, ban.admin);
 			ps.setLong(4, ban.time);
 			ps.setLong(5, ban.endTime);
-			ps.setLong(6, ban.type);
+			ps.setInt(6, ban.type.ordinal());
 			ps.setString(7, ban.uuid.toString());
-			ps.setInt(8, ban.id);
+			ps.setString(8, ban.ipAddress);
+			ps.setInt(9, ban.id);
 			success = ps.executeUpdate() > 0;
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
@@ -459,7 +461,7 @@ public class MySQLDatabase extends Database {
 			ResultSet rs = null;
 			try {
 				ps = conn.prepareStatement(
-						"SELECT * FROM " + mysqlTable + " WHERE (type = 0 OR type = 1) AND (temptime > ? OR temptime = 0)");
+						"SELECT * FROM " + mysqlTable + " WHERE (temptime > ? OR temptime = 0)");
 				ps.setLong(1, System.currentTimeMillis());
 				rs = ps.executeQuery();
 				while (rs.next()) {
@@ -483,7 +485,6 @@ public class MySQLDatabase extends Database {
 
 			try {
 				conn.close();
-				FigAdmin.log.log(Level.INFO, "[FigAdmin] Initialized db connection");
 			} catch (SQLException e) {
 				e.printStackTrace();
 				plugin.getServer().getPluginManager().disablePlugin(plugin);
@@ -495,7 +496,7 @@ public class MySQLDatabase extends Database {
 
 	private EditBan getEditBan(ResultSet rs) throws SQLException {
 		return new EditBan(rs.getInt("id"), UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getString("reason"),
-				rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), rs.getInt("type"), rs.getString("ip"));
+				rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), EditBan.BanType.values()[rs.getInt("type")], rs.getString("ip"));
 	}
 
 	@Override
@@ -512,6 +513,7 @@ public class MySQLDatabase extends Database {
 			ps.setInt(1, id);
 			ps.executeUpdate();
 			success = ps.getUpdateCount() > 0;
+			
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
 			return false;
@@ -589,6 +591,32 @@ public class MySQLDatabase extends Database {
 			}
 		}
 		return warns;
+	}
+
+	@Override
+	public int unbanIP(String ip) {
+		String mysqlTable = plugin.getConfig().getString("mysql-table");
+		Connection conn = null;
+		PreparedStatement ps = null;
+		int res = 0;
+		try {
+			conn = getSQLConnection();
+			ps = conn.prepareStatement("DELETE FROM " + mysqlTable + " WHERE ip = ? AND (type = 0 or type = 1) ORDER BY time DESC");
+			ps.setString(1, ip);
+			res = ps.executeUpdate();
+		} catch (SQLException ex) {
+			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
+		} finally {
+			try {
+				if (ps != null)
+					ps.close();
+				if (conn != null)
+					conn.close();
+			} catch (SQLException ex) {
+				FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Failed to close MySQL connection: ", ex);
+			}
+		}
+		return res;
 	}
 
 }

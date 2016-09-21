@@ -45,5 +45,5 @@ commands:
     aliases: clearplayer
   editban:
     description: Edit a ban
-    usage: /<command> <list/search/select/load/save/show/reason/time/delete/cancel>
+    usage: /<command> <list/search/select/load/save/show/reason/time/ip/delete/cancel>
     aliases: [eb,eban]

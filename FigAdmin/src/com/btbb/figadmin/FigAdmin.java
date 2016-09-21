@@ -53,6 +53,9 @@ public class FigAdmin extends JavaPlugin {
 
 	Database db;
 	String maindir = "plugins/FigAdmin/";
+	/**
+	 * Cached list only to be used by {@link FigAdminPlayerListener}
+	 */
 	ArrayList<EditBan> bannedPlayers;
 	private final FigAdminPlayerListener playerListener = new FigAdminPlayerListener(this);
 
@@ -62,7 +65,6 @@ public class FigAdmin extends JavaPlugin {
 	private FigCmdHandler cmdHandler;
 
 	public void onDisable() {
-		bannedPlayers = null;
 		log.log(Level.INFO, "FigAdmin disabled.");
 	}
 
@@ -118,7 +120,6 @@ public class FigAdmin extends JavaPlugin {
 			this.getServer().getPluginManager().disablePlugin(this);
 			return;
 		}
-		bannedPlayers = db.getBannedPlayers();
 
 		this.autoComplete = getConfig().getBoolean("auto-complete", true);
 
@@ -130,6 +131,7 @@ public class FigAdmin extends JavaPlugin {
 
 		cmdHandler = new FigCmdHandler(this);
 		PluginDescriptionFile pdfFile = this.getDescription();
+		this.updateCache();
 		log.log(Level.INFO, pdfFile.getName() + " version " + pdfFile.getVersion() + " is enabled!");
 	}
 
@@ -220,20 +222,16 @@ public class FigAdmin extends JavaPlugin {
 	}
 
 	protected EditBan isBanned(String name) {
-		for (int i = 0; i < bannedPlayers.size(); i++) {
-			EditBan e = bannedPlayers.get(i);
-			if (e.name.equalsIgnoreCase(name)) {
-				if (e.endTime < 1) {
-					return e;
-				} else if (e.endTime > System.currentTimeMillis()) {
-					// Time is up =D
-					return null;
-				} else {
-					// They are still banned XD
-					return e;
-				}
-			}
-		}
+		for (EditBan eb : db.getBannedPlayers())
+			if (eb.name.equalsIgnoreCase(name) && eb.type != EditBan.BanType.WARN)
+				return eb;
+		return null;
+	}
+
+	protected EditBan isBanned(UUID id) {
+		for (EditBan eb : db.getBannedPlayers())
+			if (eb.uuid.equals(id) && eb.type != EditBan.BanType.WARN)
+				return eb;
 		return null;
 	}
 
@@ -288,5 +286,13 @@ public class FigAdmin extends JavaPlugin {
 		String funnyChar = new Character((char) 167).toString();
 		str = str.replaceAll("&", funnyChar);
 		return str;
+	}
+
+	public void updateCache() {
+		getServer().getScheduler().runTask(this, new Runnable() {
+			public void run() {
+				bannedPlayers = db.getBannedPlayers();
+			}
+		});
 	}
 }

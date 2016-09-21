@@ -32,7 +32,7 @@ messages:
   warnMsgBroadcast: '&cPlayer &e%player%&f received a warning from &c%kicker%&f:'
   warnMsgVictim: '&cYou have received a warning from &c%player%&f:'
   reloadMsg: '&aReloaded FigAdmin.'
-  exportMsg: '&aExported banlist to banned-players.txt'
+  exportMsg: '&aExported banlist to banned-players.json and banned-ips.json'
   playerBanned: '&cPlayer %player% is banned.'
   playerNotBanned: '&aPlayer %player% is not banned.'
   ipBan: '&eIP banning is'

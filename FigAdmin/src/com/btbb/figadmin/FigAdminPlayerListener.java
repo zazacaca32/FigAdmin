@@ -66,7 +66,7 @@ public class FigAdminPlayerListener implements Listener {
 					kickerMsg = FigAdmin.formatMessage(plugin.getConfig().getString("messages.LoginTempban"));
 					kickerMsg = kickerMsg.replaceAll("%time%", date.toString());
 					kickerMsg = kickerMsg.replaceAll("%reason%", e.reason);
-				} else if (e.type == EditBan.BAN) { // make sure it isn't an
+				} else if (e.type == EditBan.BanType.BAN) { // make sure it isn't an
 													// ipban
 					kickerMsg = FigAdmin.formatMessage(plugin.getConfig().getString("messages.LoginBan"));
 					kickerMsg = kickerMsg.replaceAll("%time%", date.toString());
