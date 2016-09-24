@@ -269,7 +269,7 @@ public class FigCmdHandler {
 				sender.sendMessage(formatMessage(msg));
 				return true;
 			}
-			String reason = "Ban Hammer has Spoken!";
+			String reason = getConfig().getString("banDefaultReason", "Ban hammer has spoken!");
 			boolean broadcast = true;
 			if (args.length > 1)
 				reason = plugin.combineSplit(1, args, " ");

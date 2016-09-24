@@ -14,12 +14,13 @@ header('Content-Type: text/html; charset=utf-8');
    $server = "localhost";
    $dbuser = "root";
    $dbpass = "root";
-   $dbname = "minecraft";
-   
-mysql_connect($server, $dbuser, $dbpass);
-mysql_select_db($dbname);
+   $dbname = "minetest";
+   $db = new mysqli($server, $dbuser, $dbpass, $dbname);
+if($db->connect_errno > 0){
+    die('Unable to connect to database [' . $db->connect_error . ']');
+}
 
-$result = mysql_query("SELECT * FROM banlist ORDER BY time DESC");
+$result = $db->query("SELECT * FROM banlist ORDER BY time DESC");
 
 echo "<table width=70% border=1 cellpadding=5 cellspacing=0>";
 
@@ -32,7 +33,7 @@ echo "<tr style=\"font-weight:bold\">
 <td>Time of unban</td>
 </tr>";
 
-while($row = mysql_fetch_assoc($result)){
+while($row = $result->fetch_assoc()){
 
 if($col == "#eeeeee"){
 $col = "#ffffff";
@@ -45,11 +46,11 @@ echo "<td>".$row['name']."</td>";
 echo "<td>".$row['uuid']."</td>";
 echo "<td>".$row['reason']."</td>";
 echo "<td>".$row['admin']."</td>";
-echo "<td>".date("d M, Y g:ia",$row['time'])."</td>";
+echo "<td>".$row['time']."</td>";
 if($row['temptime'] == "0"){
 echo "<td>∞</td>";
 }else{
-echo "<td>".date("d M, Y g:ia",$row['temptime'])."</td>";
+echo "<td>".$row['temptime']."</td>";
 }
 
 echo "</tr>";
