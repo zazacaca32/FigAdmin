@@ -31,6 +31,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedList;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -72,24 +74,27 @@ public class MySQLDatabase extends Database {
 		String table = plugin.getConfig().getString("mysql-table");
 		try {
 			conn = getSQLConnection();
+			doUpdate501to502(conn, table);
+		} catch (Exception e) {
+			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't update from 5.0.1 to 5.0.2");
+			e.printStackTrace();
+		}
+		try {
+			if (conn == null)
+				conn = getSQLConnection();
 			DatabaseMetaData dbm = conn.getMetaData();
 			// Table create if not it exists
 			if (!dbm.getTables(null, null, table, null).next()) {
 				getLogger().log(Level.INFO, "[FigAdmin] Creating table " + table + ".");
-				ps = conn.prepareStatement("CREATE TABLE `" + table + "` ( \n" + "  `name` varchar(32) DEFAULT 'undefined', \n"
-						+ "  `uuid` varchar(36) NOT NULL, \n" + "  `reason` text NOT NULL, \n " + "  `admin` varchar(32) NOT NULL, \n"
-						+ "  `time` bigint(20) NOT NULL, \n " + "  `temptime` bigint(20) NOT NULL DEFAULT '0', \n"
-						+ "  `type` int(11) NOT NULL DEFAULT '0', \n" + "  `id` int(11) NOT NULL AUTO_INCREMENT, \n"
-						+ "  `ip` varchar(16) DEFAULT NULL, \n" + "  PRIMARY KEY (`id`) USING BTREE \n"
-						+ ") ENGINE=InnoDB DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ROW_FORMAT=DYNAMIC;");
-				ps.execute();
+				ps = createTable(conn, table);
 				if (!dbm.getTables(null, null, table, null).next())
 					throw new SQLException("Table " + table + " not found; tired to create and failed");
 			}
 			// Clean up old temp bans
-			ps = conn.prepareStatement("DELETE FROM " + table + " WHERE (type = 0 OR type = 1) AND (temptime > 0) AND (temptime < ?)");
-			ps.setLong(1, System.currentTimeMillis());
-			ps.execute();
+			ps = conn
+					.prepareStatement("DELETE FROM " + table + " WHERE (type = 0 OR type = 1) AND (temptime > 0) AND (temptime < date(?))");
+			ps.setString(1, getMySQLDate(System.currentTimeMillis()));
+			ps.executeUpdate();
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
 			return false;
@@ -105,6 +110,61 @@ public class MySQLDatabase extends Database {
 
 		return true;
 
+	}
+
+	private PreparedStatement createTable(Connection conn, String table) throws SQLException {
+		PreparedStatement ps = conn.prepareStatement("CREATE TABLE `" + table + "` ( \n" + "  `name` varchar(32) DEFAULT 'undefined', \n"
+				+ "  `uuid` varchar(36) NOT NULL, \n" + "  `reason` text NOT NULL, \n " + "  `admin` varchar(32) NOT NULL, \n"
+				+ "  `time` datetime NOT NULL, \n " + "  `temptime` datetime DEFAULT '0000-00-00 00:00:00', \n"
+				+ "  `type` int(11) NOT NULL DEFAULT '0', \n" + "  `id` int(11) NOT NULL AUTO_INCREMENT, \n"
+				+ "  `ip` varchar(16) DEFAULT NULL, \n" + "  PRIMARY KEY (`id`) USING BTREE \n"
+				+ ") ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ROW_FORMAT=DYNAMIC;");
+		ps.execute();
+		return ps;
+	}
+
+	private void doUpdate501to502(Connection c, String table) throws SQLException {
+		String version_table = table + "_version";
+		if (!c.getMetaData().getTables(null, null, version_table, null).next()) {
+			FigAdmin.log.log(Level.INFO, "[FigAdmin] Creating version table...");
+			PreparedStatement ps = c.prepareStatement("CREATE TABLE `" + version_table + "` (\n" + "`name` varchar(40) NOT NULL,\n"
+					+ "`version` INT DEFAULT 0\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8;");
+			ps.execute();
+			ps = c.prepareStatement("INSERT INTO " + version_table + " (name,version) VALUES(?,?)");
+			ps.setString(1, "FigAdmin 5.0.2");
+			ps.setInt(2, 502);
+			ps.execute();
+			if (c.getMetaData().getTables(null, null, table, null).next()) {
+				FigAdmin.log.log(Level.INFO, "[FigAdmin] Updating MySql from 5.0.1 to 5.0.2");
+				ps = c.prepareStatement("Select * FROM `" + table + "`");
+				ResultSet s = ps.executeQuery();
+				LinkedList<EditBan> temp = new LinkedList<EditBan>();
+				while (s.next()) {
+					temp.add(getEditBan_501(s));
+					System.out.println(temp.getLast());
+				}
+				ps = c.prepareStatement("DROP TABLE `" + table + "`");
+				ps.execute();
+				createTable(c, table);
+				for (EditBan e : temp) {
+					ps = c.prepareStatement(
+							"INSERT INTO `" + table + "` (name,uuid,reason,admin,temptime,type,time,ip,id) VALUES(?,?,?,?,?,?,?,?,?)");
+					ps.setString(1, e.name);
+					ps.setString(2, e.uuid.toString());
+					ps.setString(3, e.reason);
+					ps.setString(4, e.admin);
+					ps.setString(5, getMySQLDate(e.endTime));
+					ps.setInt(6, e.type.ordinal());
+					ps.setString(7, getMySQLDate(System.currentTimeMillis()));
+					ps.setString(8, e.ipAddress);
+					ps.setInt(9, e.id);
+					ps.execute();
+					System.out.println("adding " + e.name);
+
+				}
+			}
+
+		}
 	}
 
 	public String getAddress(UUID playerId) {
@@ -201,18 +261,15 @@ public class MySQLDatabase extends Database {
 		PreparedStatement ps = null;
 		try {
 			conn = getSQLConnection();
-			ps = conn
-					.prepareStatement("INSERT INTO `" + mysqlTable + "` (name,uuid,reason,admin,temptime,type,time,ip) VALUES(?,?,?,?,?,?,?,?)");
+			ps = conn.prepareStatement(
+					"INSERT INTO `" + mysqlTable + "` (name,uuid,reason,admin,temptime,type,time,ip) VALUES(?,?,?,?,?,?,?,?)");
 			ps.setString(1, e.name);
 			ps.setString(2, e.uuid.toString());
 			ps.setString(3, e.reason);
 			ps.setString(4, e.admin);
-			if (e.endTime < 1) {
-				ps.setLong(5, 0);
-			} else
-				ps.setLong(5, e.endTime);
+			ps.setString(5, getMySQLDate(e.endTime));
 			ps.setInt(6, e.type.ordinal());
-			ps.setLong(7, System.currentTimeMillis());
+			ps.setString(7, getMySQLDate(System.currentTimeMillis()));
 			ps.setString(8, e.ipAddress);
 			ps.executeUpdate();
 			// Update banedit ID
@@ -388,8 +445,7 @@ public class MySQLDatabase extends Database {
 			}
 			rs = ps.executeQuery();
 			while (rs.next()) {
-				return new EditBan(rs.getInt("id"), UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getString("reason"),
-						rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), EditBan.BanType.values()[rs.getInt("type")], rs.getString("ip"));
+				return getEditBan(rs);
 			}
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
@@ -420,12 +476,12 @@ public class MySQLDatabase extends Database {
 			conn = getSQLConnection();
 			ps = conn.prepareStatement("UPDATE " + mysqlTable
 					+ " SET name = ?, reason = ?, admin = ?, time = ?, temptime = ?, type = ?, uuid = ?, ip = ? WHERE id = ? LIMIT 1");
-			
+
 			ps.setString(1, ban.name);
 			ps.setString(2, ban.reason);
 			ps.setString(3, ban.admin);
-			ps.setLong(4, ban.time);
-			ps.setLong(5, ban.endTime);
+			ps.setString(4, getMySQLDate(ban.time));
+			ps.setString(5, getMySQLDate(ban.endTime));
 			ps.setInt(6, ban.type.ordinal());
 			ps.setString(7, ban.uuid.toString());
 			ps.setString(8, ban.ipAddress);
@@ -446,6 +502,22 @@ public class MySQLDatabase extends Database {
 		return success;
 	}
 
+	private java.text.SimpleDateFormat dft = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+	private String getMySQLDate(long time) {
+		if (time < 1)
+			return "0000-00-00 00:00:00";
+		return dft.format(new Date(time));
+	}
+
+	private long getSQLTime(ResultSet s, String key) {
+		try {
+			return s.getTimestamp(key).getTime();
+		} catch (Exception exc) {
+			return 0;
+		}
+	}
+
 	@Override
 	public ArrayList<EditBan> getBannedPlayers() {
 		ArrayList<EditBan> list = new ArrayList<EditBan>();
@@ -460,9 +532,8 @@ public class MySQLDatabase extends Database {
 			PreparedStatement ps = null;
 			ResultSet rs = null;
 			try {
-				ps = conn.prepareStatement(
-						"SELECT * FROM " + mysqlTable + " WHERE (temptime > ? OR temptime = 0)");
-				ps.setLong(1, System.currentTimeMillis());
+				ps = conn.prepareStatement("SELECT * FROM " + mysqlTable + " WHERE (temptime > ? OR temptime = 0)");
+				ps.setString(1, getMySQLDate(System.currentTimeMillis()));
 				rs = ps.executeQuery();
 				while (rs.next()) {
 					EditBan e = getEditBan(rs);
@@ -494,9 +565,16 @@ public class MySQLDatabase extends Database {
 
 	}
 
+	private EditBan getEditBan_501(ResultSet rs) throws SQLException {
+		return new EditBan(rs.getInt("id"), UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getString("reason"),
+				rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), EditBan.BanType.values()[rs.getInt("type")],
+				rs.getString("ip"));
+	}
+
 	private EditBan getEditBan(ResultSet rs) throws SQLException {
 		return new EditBan(rs.getInt("id"), UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getString("reason"),
-				rs.getString("admin"), rs.getLong("time"), rs.getLong("temptime"), EditBan.BanType.values()[rs.getInt("type")], rs.getString("ip"));
+				rs.getString("admin"), getSQLTime(rs, "time"), getSQLTime(rs, "temptime"), EditBan.BanType.values()[rs.getInt("type")],
+				rs.getString("ip"));
 	}
 
 	@Override
@@ -513,7 +591,7 @@ public class MySQLDatabase extends Database {
 			ps.setInt(1, id);
 			ps.executeUpdate();
 			success = ps.getUpdateCount() > 0;
-			
+
 		} catch (SQLException ex) {
 			FigAdmin.log.log(Level.SEVERE, "[FigAdmin] Couldn't execute MySQL statement: ", ex);
 			return false;
