@@ -47,7 +47,7 @@ echo "<td>".$row['uuid']."</td>";
 echo "<td>".$row['reason']."</td>";
 echo "<td>".$row['admin']."</td>";
 echo "<td>".$row['time']."</td>";
-if($row['temptime'] == "0"){
+if($row['temptime'] == "0000-00-00 00:00:00"){
 echo "<td>∞</td>";
 }else{
 echo "<td>".$row['temptime']."</td>";
